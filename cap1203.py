@@ -1,4 +1,4 @@
-#import smbus2 as smbus
+# import smbus2 as smbus
 from enum import IntEnum, IntFlag
 from typing import Union
 
@@ -73,14 +73,41 @@ class PowerTime(IntEnum):
     t2240ms = 0x03  # 2.24s
 
 
-def set_bits(register: int, value: Union[int, bool], index: int, length: int = 1) -> int:
+def set_bits(register: int, value, index, length=1):
+    """
+    Set selected bits in register and return new value
+
+    :param register: Input register value
+    :type register: int
+    :param value: Bits to write to register
+    :type value: int
+    :param index: Start index (from right)
+    :type index: int
+    :param length: Number of bits (default 1)
+    :type length: int
+    :return: Output new register value
+    :rtype: int
+    """
     mask = (2**length)-1
     register = register & ~(mask << index)
     register = register | (mask & value) << index
     return register
 
 
-def get_bits(register: int, index: int, length: int = 1) -> Union[int, bool]:
+def get_bits(register, index, length=1):
+    """
+    Get selected bit(s) from register while masking out the rest.
+    Returns as boolean if length==1
+
+    :param register: Register value
+    :type register: int
+    :param index: Start index (from right)
+    :type index: int
+    :param length: Number of bits (default 1)
+    :type length: int
+    :return: Selected bit(s)
+    :rtype: Union[int, bool]
+    """
     result = (register >> index) & (2 ** length - 1)
     if length == 1:
         return result == 1
@@ -153,13 +180,13 @@ class CAP1203(object):
             # Base count out of range for a sensor
             bc_pad = Pad(get_bits(reg_bc, 0, 3))
             if bc_pad:
-                print(f"Base count out of range for pad(s): {bc_pad}")
+                print(f"Base count out of range for pad(s): {bc_pad.__repr__()}")
 
         if get_bits(reg, 5):
             # Calibration failed for a sensor
             error_pad = Pad(get_bits(reg_inp, 0, 3))
             if error_pad:
-                print(f"Failed to calibrate pad(s): {error_pad}")
+                print(f"Failed to calibrate pad(s): {error_pad.__repr__()}")
 
         return bc_pad + error_pad
 
@@ -342,7 +369,7 @@ class CAP1203(object):
         set_bits(reg, time, 0, 2)
         return
 
-    def get_power_button_time(self) -> PowerTime:
+    def get_power_button_time(self):
         """
         Get the time setting for the power button function.
         See page 16 for more information on the power button function.
