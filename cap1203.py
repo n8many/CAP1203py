@@ -180,7 +180,7 @@ class CAP1203(object):
         """
         # Check status registers
         reg = self.read_register(GENERAL_STATUS)
-        reg_inp = self.read_register(SENSOR_INPUT_STATUS)
+        reg_inp = self.read_register(CALIBRATION_ACTIVATE_AND_STATUS)
         reg_bc = self.read_register(BASE_COUNT_OUT)
 
         bc_pad = Pad(0)
@@ -201,6 +201,13 @@ class CAP1203(object):
                 print(f"Failed to calibrate pad(s): {error_pad.__repr__()}")
 
         return bc_pad + error_pad
+
+    def reset(self):
+        """
+        Reset CAP1203 to manually recalibrate
+        """
+        self.write_register(CALIBRATION_ACTIVATE_AND_STATUS, 0x07)
+        return
 
     def set_sensitivity(self, sensitivity):
         """
