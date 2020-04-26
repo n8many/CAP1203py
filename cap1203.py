@@ -1,6 +1,10 @@
-# import smbus2 as smbus
+"""
+Python library for the Sparkfun qwiic CAP1203 sensor.
+
+"""
+
 from enum import IntEnum, IntFlag
-from typing import Union
+
 
 ADDRESS = 0x28
 
@@ -130,9 +134,13 @@ class CAP1203(object):
         if address != ADDRESS:
             raise ValueError("Invalid Address: {0:#x}".format(address))
         self.address = address
+
+        # Make sure the bus input is valid
         if bus is None:
             raise ValueError("Invalid bus, must pass in SMBus object")
         self.bus = bus
+
+        # Checks to make sure the board is set up properly
         if self.is_connected():
             self.set_sensitivity(Sensitivity.x2)
             self.set_interrupt_setting(True)
@@ -170,18 +178,22 @@ class CAP1203(object):
         :return: Pads with error
         :rtype: Pad
         """
+        # Check status registers
         reg = self.read_register(GENERAL_STATUS)
         reg_inp = self.read_register(SENSOR_INPUT_STATUS)
         reg_bc = self.read_register(BASE_COUNT_OUT)
+
         bc_pad = Pad(0)
         error_pad = Pad(0)
 
+        # Base Count errors
         if get_bits(reg, 6):
             # Base count out of range for a sensor
             bc_pad = Pad(get_bits(reg_bc, 0, 3))
             if bc_pad:
                 print(f"Base count out of range for pad(s): {bc_pad.__repr__()}")
 
+        # Calibration errors
         if get_bits(reg, 5):
             # Calibration failed for a sensor
             error_pad = Pad(get_bits(reg_inp, 0, 3))
