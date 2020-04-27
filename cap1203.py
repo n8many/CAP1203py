@@ -1,10 +1,10 @@
 """
-Python library for the Sparkfun qwiic CAP1203 sensor.
+Python library for the CAP1203 sensor.
 
 """
 
 from enum import IntEnum, IntFlag
-
+from typing import Union
 
 ADDRESS = 0x28
 
@@ -77,7 +77,7 @@ class PowerTime(IntEnum):
     t2240ms = 0x03  # 2.24s
 
 
-def set_bits(register: int, value, index, length=1):
+def set_bits(register, value, index, length=1):
     """
     Set selected bits in register and return new value
 
@@ -125,7 +125,6 @@ class CAP1203(object):
         Object for connecting to CAP1023 sensor via i2c.
 
         :param bus: i2c bus to connect to CAP1203 sensor. Must be compatible with smbus.SMBus object
-        :type bus: smbus.SMBus
         :param address: i2c address of CAP1203 sensor
         :type address: int
         """
@@ -168,7 +167,7 @@ class CAP1203(object):
         """
         Check main control register
         """
-        reg = self.read_register(MAIN_CONTROL)
+        self._read_register(MAIN_CONTROL)
         return
 
     def check_status(self):
@@ -179,34 +178,29 @@ class CAP1203(object):
         :rtype: Pad
         """
         # Check status registers
-        reg = self.read_register(GENERAL_STATUS)
-        reg_inp = self.read_register(CALIBRATION_ACTIVATE_AND_STATUS)
-        reg_bc = self.read_register(BASE_COUNT_OUT)
-
-        bc_pad = Pad(0)
-        error_pad = Pad(0)
+        reg = self._read_register(GENERAL_STATUS)
+        bc_pad = Pad(self._read_bits_from_register(CALIBRATION_ACTIVATE_AND_STATUS, 0, 3))
+        error_pad = Pad(self._read_bits_from_register(BASE_COUNT_OUT, 0, 3))
 
         # Base Count errors
         if get_bits(reg, 6):
             # Base count out of range for a sensor
-            bc_pad = Pad(get_bits(reg_bc, 0, 3))
             if bc_pad:
                 print(f"Base count out of range for pad(s): {bc_pad.__repr__()}")
 
         # Calibration errors
         if get_bits(reg, 5):
             # Calibration failed for a sensor
-            error_pad = Pad(get_bits(reg_inp, 0, 3))
             if error_pad:
                 print(f"Failed to calibrate pad(s): {error_pad.__repr__()}")
 
-        return bc_pad + error_pad
+        return bc_pad | error_pad
 
     def reset(self):
         """
         Reset CAP1203 to manually recalibrate
         """
-        self.write_register(CALIBRATION_ACTIVATE_AND_STATUS, 0x07)
+        self._write_register(CALIBRATION_ACTIVATE_AND_STATUS, 0x07)
         return
 
     def set_sensitivity(self, sensitivity):
@@ -216,9 +210,7 @@ class CAP1203(object):
         :param sensitivity: Value to set sensor sensitivity to
         :type sensitivity: Sensitivity
         """
-        reg = self.read_register(SENSITIVITY_CONTROL)
-        reg = set_bits(reg, sensitivity, 4, 3)
-        self.write_register(SENSITIVITY_CONTROL, reg)
+        self._write_bits_to_register(SENSITIVITY_CONTROL, sensitivity, 4, 3)
         return
 
     def get_sensitivity(self):
@@ -228,24 +220,21 @@ class CAP1203(object):
         :return: Sensitivity setting
         :rtype: Sensitivity
         """
-        return Sensitivity(get_bits(self.read_register(SENSITIVITY_CONTROL), 4, 3))
+        return Sensitivity(self._read_bits_from_register(SENSITIVITY_CONTROL, 4, 3))
 
     def set_interrupt_setting(self, enable):
         """
-        Set interrupt setting of CAP1203
+        Set interrupt setting of CAP1203.
 
         :param enable: Enable interrupt for some or all pads
         :type enable: Union[bool, Pad]
         """
-        reg = self.read_register(INTERRUPT_ENABLE)
         if isinstance(enable, Pad):
             # Enable selected pads
-            reg = set_bits(reg, enable, 0, 3)
+            pad = enable
         else:
-            reg = set_bits(reg, enable, 0)  # Left
-            reg = set_bits(reg, enable, 1)  # Middle
-            reg = set_bits(reg, enable, 2)  # Right
-        self.write_register(INTERRUPT_ENABLE, reg)
+            pad = Pad(0b111 * enable)  # enable all pads
+        self._write_bits_to_register(INTERRUPT_ENABLE, pad, 0, 3)
         return
 
     def get_interrupt_setting(self):
@@ -255,17 +244,13 @@ class CAP1203(object):
         :return: Pads with interrupts enabled
         :rtype: Pad
         """
-        reg = self.read_register(INTERRUPT_ENABLE)
-        return Pad(get_bits(reg, 0, 3))
+        return Pad(self._read_bits_from_register(INTERRUPT_ENABLE, 0, 3))
 
     def clear_interrupt(self):
         """
         Clear interrupt from CAP1203
         """
-        reg = self.read_register(MAIN_CONTROL)
-        reg = set_bits(reg, False, 0)  # Clear flag
-        self.write_register(MAIN_CONTROL, reg)
-        return
+        self._write_bits_to_register(MAIN_CONTROL, False, 0)
 
     def check_touched(self):
         """
@@ -274,9 +259,7 @@ class CAP1203(object):
         :return: Touched pad(s) if any
         :rtype: Pad
         """
-        reg = self.read_register(SENSOR_INPUT_STATUS)
-        touch_status = Pad(get_bits(reg, 0, 3))
-        return touch_status
+        return self._read_bits_from_register(SENSOR_INPUT_STATUS, 0, 3)
 
     def get_touched(self):
         """
@@ -297,8 +280,7 @@ class CAP1203(object):
         :return: Touch status
         :rtype: bool
         """
-        reg = self.read_register(GENERAL_STATUS)
-        res = get_bits(reg, 0)
+        res = self._read_bits_from_register(GENERAL_STATUS, 0)
         if res:
             self.clear_interrupt()
             return True
@@ -344,11 +326,13 @@ class CAP1203(object):
         return False
 
     def is_right_swipe(self):
-
+        # TODO: Complete "is_right_swipe"
+        print("Warning, is_right_swipe is unimplemented")
         return False
 
     def is_left_swipe(self):
-
+        # TODO: Complete "is_left_swipe"
+        print("Warning, is_left_swipe is unimplemented")
         return False
 
     def set_power_button_pad(self, pad):
@@ -359,10 +343,7 @@ class CAP1203(object):
         :param pad: Pad(s) to enable the power button on
         :type pad: Pad
         """
-        reg = self.read_register(POWER_BUTTON)
-        set_bits(reg, pad, 0, 3)
-        self.write_register(POWER_BUTTON, reg)
-        return
+        self._write_bits_to_register(POWER_BUTTON, pad, 0, 3)
 
     def get_power_button_pad(self):
         """
@@ -372,11 +353,9 @@ class CAP1203(object):
         :return: Pad(s) to enable the power button on
         :rtype: Pad
         """
-        reg = self.read_register(POWER_BUTTON)
-        res = Pad(get_bits(reg, 0, 3))
-        return res
+        return Pad(self._read_bits_from_register(POWER_BUTTON, 0, 3))
 
-    def set_power_button_time(self, time: PowerTime):
+    def set_power_button_time(self, time):
         """
         Set the time setting for the power button function.
         See page 16 for more information on the power button function.
@@ -384,9 +363,7 @@ class CAP1203(object):
         :param time: Time setting for power button function
         :type time: PowerTime
         """
-        reg = self.read_register(POWER_BUTTON_CONFIG)
-        set_bits(reg, time, 0, 2)
-        return
+        self._write_bits_to_register(POWER_BUTTON_CONFIG, time, 0, 2)
 
     def get_power_button_time(self):
         """
@@ -396,8 +373,7 @@ class CAP1203(object):
         :return: Time setting for power button function
         :rtype: PowerTime
         """
-        reg = self.read_register(POWER_BUTTON_CONFIG)
-        return PowerTime(get_bits(reg, 0, 2))
+        return PowerTime(self._read_bits_from_register(POWER_BUTTON_CONFIG, 0, 2))
 
     def set_power_button(self, enabled):
         """
@@ -406,12 +382,8 @@ class CAP1203(object):
 
         :param enabled:
         :type enabled: bool
-        :return:
         """
-        reg = self.read_register(POWER_BUTTON_CONFIG)
-        reg = set_bits(reg, enabled, 2)
-        self.write_register(POWER_BUTTON_CONFIG, reg)
-        return
+        self._write_bits_to_register(POWER_BUTTON_CONFIG, enabled, 2)
 
     def get_power_button_setting(self):
         """
@@ -421,9 +393,7 @@ class CAP1203(object):
         :return: Enabled status of power button
         :rtype: bool
         """
-        reg = self.read_register(POWER_BUTTON_CONFIG)
-        res = get_bits(reg, 2)
-        return res
+        return self._read_bits_from_register(POWER_BUTTON_CONFIG, 2)
 
     def is_power_button_touched(self):
         """
@@ -434,32 +404,60 @@ class CAP1203(object):
         :rtype: bool
         """
         #
-        reg = self.read_register(GENERAL_STATUS)
-        res = get_bits(reg, 4)
+        res = self._read_bits_from_register(GENERAL_STATUS, 4)
         if res:
             self.clear_interrupt()
             return True
         return False
 
-    def read_register(self, register):
+    def _read_bits_from_register(self, register, index, length=1):
         """
         Read value from register on CAP1203
 
         :param register: Register address to acquire
         :type register: int
-        :return: int (byte)
+        :param index: position to pull bits from
+        :type index: int
+        :param length: number of bits to grab
+        :type length: int
+        :return: Bits from register
+        :rtype: Union[int, bool]
         """
-        return self.bus.read_i2c_block_data(self.address, register, 1)[0]
+        return get_bits(self._read_register(register), index, length)
 
-    def write_register(self, register, value):
+    def _write_bits_to_register(self, register, value, index, length=1):
         """
         Write value to register on CAP1203
 
         :param register: Address of register you are writing to
         :type register: int
-        :param value: Value written to register
-        :type value: int (0-255)
-        :return:
+        :param value: Bits to write to register
+        :type value: Union[int, bool]
+        :param index: position to write bits to
+        :type index: int
+        :param length: number of bits to grab
+        :type length: int
+        """
+        self._write_register(register, set_bits(self._read_register(register), value, index, length))
+
+    def _read_register(self, register):
+        """
+        Read value from register on CAP1203
+
+        :param register: Register address to acquire
+        :type register: int
+        :return: Byte in register
+        :rtype: int
+        """
+        return self.bus.read_i2c_block_data(self.address, register)[0]
+
+    def _write_register(self, register, value):
+        """
+        Write value to register on CAP1203
+
+        :param register: Address of register you are writing to
+        :type register: int
+        :param value: Byte to write to register
+        :type value: int
         """
         self.bus.write_i2c_block_data(self.address, register, [value])
-        return
