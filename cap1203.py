@@ -259,7 +259,7 @@ class CAP1203(object):
         :return: Touched pad(s) if any
         :rtype: Pad
         """
-        return self._read_bits_from_register(SENSOR_INPUT_STATUS, 0, 3)
+        return Pad(self._read_bits_from_register(SENSOR_INPUT_STATUS, 0, 3))
 
     def get_touched(self):
         """
